@@ -34,7 +34,7 @@ A sophisticated research automation tool using LangGraph + LangChain with Claude
 ### Prerequisites
 
 - Python 3.8+
-- Anthropic API key (Claude access)
+- **One of:** Anthropic API key, Ollama, LM Studio, or self-hosted LLM server
 - SerpAPI key (Google Search access)
 
 ### Setup
@@ -52,6 +52,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install 'langchain>=0.3.27,<0.4' \
             'langgraph>=0.6.8,<0.7' \
             'langchain-anthropic>=0.3.21,<0.4' \
+            'langchain-openai>=0.3.0' \
             python-dotenv \
             google-search-results \
             requests
@@ -59,12 +60,39 @@ pip install 'langchain>=0.3.27,<0.4' \
 
 ### Configuration
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root. Choose one option:
 
+#### Option 1: Anthropic Claude (Cloud API)
 ```env
+LLM_PROVIDER=anthropic
 ANTHROPIC_API_KEY=sk-ant-your-key-here
+MODEL_NAME=claude-sonnet-4-5-20250929
 SERPAPI_API_KEY=your-serpapi-key-here
-CLAUDE_MODEL=claude-sonnet-4-5-20250929  # optional
+```
+
+#### Option 2: Ollama (Local - FREE)
+```env
+LLM_PROVIDER=ollama
+OPENAI_BASE_URL=http://localhost:11434/v1
+MODEL_NAME=llama3.1:70b
+SERPAPI_API_KEY=your-serpapi-key-here
+```
+
+#### Option 3: LM Studio (Local - FREE)
+```env
+LLM_PROVIDER=custom
+OPENAI_BASE_URL=http://localhost:1234/v1
+MODEL_NAME=local-model
+SERPAPI_API_KEY=your-serpapi-key-here
+```
+
+#### Option 4: Self-Hosted Server (Remote)
+```env
+LLM_PROVIDER=custom
+OPENAI_BASE_URL=http://your-server:8000/v1
+OPENAI_API_KEY=your-api-key  # if required
+MODEL_NAME=mistral-large
+SERPAPI_API_KEY=your-serpapi-key-here
 ```
 
 ## 📖 Usage
@@ -130,15 +158,70 @@ Shor's algorithm [3]...
   ...
 ```
 
-## 🔧 Model Selection
+## 🔧 Model Selection & Self-Hosted Setup
 
-The script uses a fallback chain for model selection:
+### Supported Providers
 
-1. `claude-sonnet-4-5-20250929` (default)
-2. `claude-sonnet-4-20250514`
-3. `claude-3-7-sonnet-20250219`
+| Provider | Cost | Setup Difficulty | Performance |
+|----------|------|------------------|-------------|
+| **Anthropic Claude** | $0.50-2.00/query | Easy | Excellent |
+| **Ollama** | FREE | Easy | Good |
+| **LM Studio** | FREE | Easy | Good |
+| **Self-Hosted vLLM** | Server costs | Medium | Excellent |
+| **Self-Hosted Text Generation WebUI** | Server costs | Medium | Good |
 
-Models with extended thinking capabilities (Claude 3.7+ / Sonnet 4+) enable enhanced planning.
+### Quick Setup Guides
+
+#### Ollama (Recommended for Local)
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull a model
+ollama pull llama3.1:70b  # or mistral, phi3, etc.
+
+# Run Ollama server (runs automatically on install)
+ollama serve
+
+# Configure .env
+echo "LLM_PROVIDER=ollama" > .env
+echo "OPENAI_BASE_URL=http://localhost:11434/v1" >> .env
+echo "MODEL_NAME=llama3.1:70b" >> .env
+echo "SERPAPI_API_KEY=your-key" >> .env
+```
+
+#### LM Studio
+```bash
+# 1. Download from https://lmstudio.ai
+# 2. Load a model (e.g., Mistral, Llama)
+# 3. Start local server (default: localhost:1234)
+# 4. Configure .env
+echo "LLM_PROVIDER=custom" > .env
+echo "OPENAI_BASE_URL=http://localhost:1234/v1" >> .env
+echo "MODEL_NAME=local-model" >> .env
+echo "SERPAPI_API_KEY=your-key" >> .env
+```
+
+#### Self-Hosted Server (vLLM, TGI, etc.)
+```env
+LLM_PROVIDER=custom
+OPENAI_BASE_URL=http://your-server:8000/v1
+OPENAI_API_KEY=your-optional-key
+MODEL_NAME=your-model-name
+SERPAPI_API_KEY=your-serpapi-key
+```
+
+### Model Recommendations
+
+**For Best Results:**
+- Claude Sonnet 4 (paid, excellent)
+- Llama 3.1 70B (free via Ollama, very good)
+- Mistral Large (free via Ollama, good)
+
+**For Faster/Lower Resource:**
+- Llama 3.1 8B (free, decent)
+- Phi-3 Medium (free, decent)
+- Mistral 7B (free, decent)
 
 ## 🛡️ Error Handling
 

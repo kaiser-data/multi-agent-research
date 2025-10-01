@@ -11,18 +11,40 @@ PURPOSE:
 
 INSTALL:
     pip install 'langchain>=0.3.27,<0.4' 'langgraph>=0.6.8,<0.7' \
-                'langchain-anthropic>=0.3.21,<0.4' python-dotenv \
-                google-search-results requests
+                'langchain-anthropic>=0.3.21,<0.4' 'langchain-openai>=0.3.0' \
+                python-dotenv google-search-results requests
 
-.ENV EXAMPLE:
+.ENV EXAMPLES:
+
+    # Option 1: Anthropic Claude (API)
+    LLM_PROVIDER=anthropic
     ANTHROPIC_API_KEY=sk-ant-...
+    MODEL_NAME=claude-sonnet-4-5-20250929
     SERPAPI_API_KEY=your_serpapi_key
-    CLAUDE_MODEL=claude-sonnet-4-5-20250929  # optional
+
+    # Option 2: Ollama (Local)
+    LLM_PROVIDER=ollama
+    OPENAI_BASE_URL=http://localhost:11434/v1
+    MODEL_NAME=llama3.1:70b
+    SERPAPI_API_KEY=your_serpapi_key
+
+    # Option 3: LM Studio (Local)
+    LLM_PROVIDER=custom
+    OPENAI_BASE_URL=http://localhost:1234/v1
+    MODEL_NAME=local-model
+    SERPAPI_API_KEY=your_serpapi_key
+
+    # Option 4: Remote Self-Hosted
+    LLM_PROVIDER=custom
+    OPENAI_BASE_URL=http://your-server:8000/v1
+    OPENAI_API_KEY=your-key
+    MODEL_NAME=mistral-large
+    SERPAPI_API_KEY=your_serpapi_key
 
 RUN EXAMPLES:
     python multi_agent_research.py --query "impact of quantum computing on cryptography"
     python multi_agent_research.py --query "latest AI safety research" --results 8
-    python multi_agent_research.py --query "climate change solutions" --model claude-3-7-sonnet-20250219
+    python multi_agent_research.py --query "climate change solutions" --model llama3.1
 """
 
 import argparse
@@ -36,6 +58,7 @@ from typing import Annotated, Any, List, TypedDict
 from dotenv import load_dotenv
 from langchain.schema import AIMessage, HumanMessage
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import AnyMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -47,21 +70,20 @@ from serpapi import GoogleSearch
 # ─── Configuration ───────────────────────────────────────────────────────────
 load_dotenv()
 
+# LLM Provider Configuration
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")  # anthropic, openai, ollama, custom
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")  # For custom/self-hosted endpoints
+MODEL_NAME = os.getenv("MODEL_NAME", "claude-sonnet-4-5-20250929")
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
-CLAUDE_MODEL = os.getenv(
-    "CLAUDE_MODEL",
-    "claude-sonnet-4-5-20250929"
-)
 
-MODEL_FALLBACKS = [
-    "claude-sonnet-4-5-20250929",
-    "claude-sonnet-4-20250514",
-    "claude-3-7-sonnet-20250219",
-]
-
-if not ANTHROPIC_API_KEY:
-    print("❌ ERROR: ANTHROPIC_API_KEY not found in environment", file=sys.stderr)
+# Validate required configuration
+if LLM_PROVIDER == "anthropic" and not ANTHROPIC_API_KEY:
+    print("❌ ERROR: ANTHROPIC_API_KEY required for provider 'anthropic'", file=sys.stderr)
+    sys.exit(1)
+if LLM_PROVIDER in ["openai", "ollama", "custom"] and not OPENAI_BASE_URL:
+    print("❌ ERROR: OPENAI_BASE_URL required for self-hosted models", file=sys.stderr)
     sys.exit(1)
 if not SERPAPI_API_KEY:
     print("❌ ERROR: SERPAPI_API_KEY not found in environment", file=sys.stderr)
@@ -113,16 +135,32 @@ def google_search(query: str, num_results: int = 5) -> List[dict]:
 
 
 # ─── LLM Initialization ──────────────────────────────────────────────────────
-def get_llm(model_name: str) -> ChatAnthropic:
-    """Initialize Claude LLM with model selection."""
-    selected = model_name if model_name in MODEL_FALLBACKS else MODEL_FALLBACKS[0]
-    return ChatAnthropic(model=selected, temperature=0, api_key=ANTHROPIC_API_KEY)
+def get_llm(model_name: str = None):
+    """Initialize LLM based on provider configuration."""
+    if model_name is None:
+        model_name = MODEL_NAME
+
+    if LLM_PROVIDER == "anthropic":
+        return ChatAnthropic(
+            model=model_name,
+            temperature=0,
+            api_key=ANTHROPIC_API_KEY
+        )
+    else:
+        # OpenAI-compatible API (works with Ollama, LM Studio, vLLM, etc.)
+        return ChatOpenAI(
+            model=model_name,
+            temperature=0,
+            openai_api_key=OPENAI_API_KEY or "not-needed",
+            openai_api_base=OPENAI_BASE_URL,
+            max_retries=3
+        )
 
 
 # ─── Agent Nodes ─────────────────────────────────────────────────────────────
 def planner_node(state: ResearchState) -> dict:
     """Generate 2-5 research steps from query."""
-    llm = get_llm(CLAUDE_MODEL)
+    llm = get_llm()
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a research planner. Given a query, decompose it into 2-5 focused research steps. Return ONLY a JSON array of strings."),
         ("human", "Query: {query}\n\nReturn research steps as JSON array.")
@@ -164,7 +202,7 @@ def researcher_node(state: ResearchState) -> dict:
 
 def writer_node(state: ResearchState) -> dict:
     """Synthesize findings into brief with citations."""
-    llm = get_llm(CLAUDE_MODEL)
+    llm = get_llm()
 
     results_text = "\n\n".join([
         f"[{i+1}] {r['title']}\nURL: {r['url']}\nSnippet: {r['snippet']}"
@@ -195,7 +233,7 @@ def writer_node(state: ResearchState) -> dict:
 
 def reviewer_node(state: ResearchState) -> dict:
     """Validate citations and decide if revision needed."""
-    llm = get_llm(CLAUDE_MODEL)
+    llm = get_llm()
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a fact-checker. Review if all claims have proper citations [n]. Reply with 'APPROVED' or 'NEEDS_REVISION: <reason>'."),
@@ -259,8 +297,8 @@ def main():
     args = parser.parse_args()
 
     if args.model:
-        global CLAUDE_MODEL
-        CLAUDE_MODEL = args.model
+        global MODEL_NAME
+        MODEL_NAME = args.model
 
     num_results = max(1, min(args.results, 8))
 
