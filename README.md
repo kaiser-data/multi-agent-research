@@ -1,264 +1,333 @@
 # Multi-Agent Research System
 
-A sophisticated research automation tool using LangGraph + LangChain with Claude AI and Google Search to orchestrate multi-agent workflows for comprehensive query analysis.
+A production-ready multi-agent research system with clean architecture, flexible provider support, and an intuitive web interface. Built with LangGraph, LangChain, and Gradio.
 
 ## 🎯 Features
 
-- **Multi-Agent Orchestration**: Coordinates specialized agents (Planner, Researcher, Writer, Reviewer)
-- **Intelligent Research Planning**: Decomposes queries into focused research steps
-- **Automated Search**: Executes Google searches via SerpAPI with retry logic
-- **Citation-Based Synthesis**: Generates concise briefs with inline citations
-- **Quality Review**: Validates factual claims and triggers revisions when needed
-- **State Persistence**: Uses LangGraph checkpointing for workflow reliability
+- **Multi-Agent Orchestration**: Specialized agents (Planner, Researcher, Writer, Reviewer) work together
+- **Provider Flexibility**: Support for multiple LLM and search providers
+- **Clean Architecture**: Proper separation of concerns with modular design
+- **Web Interface**: Intuitive Gradio UI with real-time results
+- **Error Resilience**: Graceful degradation and helpful error messages
+- **Type Safety**: Full type hints throughout codebase
 
 ## 🏗️ Architecture
 
 ```
-┌─────────┐    ┌────────────┐    ┌────────┐    ┌──────────┐
-│ Planner │ -> │ Researcher │ -> │ Writer │ -> │ Reviewer │ -> END
-└─────────┘    └────────────┘    └────────┘    └──────────┘
-                                       ↑            │
-                                       └────────────┘
-                                    (revision loop)
+multi-agent-research/
+├── agents/                 # Agent implementations
+│   ├── planner.py         # Query decomposition
+│   ├── researcher.py      # Search execution
+│   ├── writer.py          # Brief synthesis
+│   └── reviewer.py        # Citation validation
+├── providers/             # Provider abstractions
+│   ├── llm.py            # LLM provider factory
+│   └── search.py         # Search provider factory
+├── workflow.py           # LangGraph orchestration
+├── app.py               # Gradio web interface
+└── multi_agent_research.py  # Legacy CLI (deprecated)
 ```
 
-### Agents
+### Workflow
 
-1. **Planner**: Decomposes research queries into 2-5 focused steps using Claude's extended thinking
-2. **Researcher**: Executes Google searches for each step, normalizes results with error handling
-3. **Writer**: Synthesizes findings into ≤200-word briefs with inline citations [1], [2], etc.
-4. **Reviewer**: Validates citations and triggers one revision if needed
+```
+Entry → Planner → Researcher → Writer → Reviewer → END
+                               ↑          |
+                               └──────────┘
+                           (max 1 revision)
+```
 
-## 🚀 Installation
+## 🚀 Quick Start
 
-### Prerequisites
-
-- Python 3.8+
-- **One of:** Anthropic API key, Ollama, LM Studio, or self-hosted LLM server
-- SerpAPI key (Google Search access)
-
-### Setup
+### 1. Installation
 
 ```bash
 # Clone repository
-git clone <repository-url>
+git clone https://github.com/kaiser-data/multi-agent-research.git
 cd multi-agent-research
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-### Configuration
+### 2. Configuration
 
-Create a `.env` file in the project root. Choose one option:
+Copy `.env.example` to `.env` and configure:
 
-#### Option 1: Anthropic Claude (Cloud API)
-```env
-LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=sk-ant-your-key-here
-MODEL_NAME=claude-sonnet-4-5-20250929
-SERPAPI_API_KEY=your-serpapi-key-here
+```bash
+cp .env.example .env
 ```
 
-#### Option 2: Ollama (Local - FREE)
+**Minimum configuration (free options):**
+
 ```env
 LLM_PROVIDER=ollama
-OPENAI_BASE_URL=http://localhost:11434/v1
 MODEL_NAME=llama3.1:70b
-SERPAPI_API_KEY=your-serpapi-key-here
+OLLAMA_BASE_URL=http://localhost:11434/v1
+SEARCH_PROVIDER=duckduckgo
 ```
 
-#### Option 3: LM Studio (Local - FREE)
-```env
-LLM_PROVIDER=custom
-OPENAI_BASE_URL=http://localhost:1234/v1
-MODEL_NAME=local-model
-SERPAPI_API_KEY=your-serpapi-key-here
-```
+### 3. Run
 
-#### Option 4: Self-Hosted Server (Remote)
-```env
-LLM_PROVIDER=custom
-OPENAI_BASE_URL=http://your-server:8000/v1
-OPENAI_API_KEY=your-api-key  # if required
-MODEL_NAME=mistral-large
-SERPAPI_API_KEY=your-serpapi-key-here
-```
-
-## 📖 Usage
-
-### Basic Usage
-
+**Web Interface (Recommended):**
 ```bash
-python multi_agent_research.py --query "impact of quantum computing on cryptography"
+python app.py
+```
+Then open http://localhost:7860 in your browser.
+
+**Python API:**
+```python
+from workflow import run_research
+
+result = run_research(
+    query="What are the latest developments in AI safety?",
+    llm_provider="ollama",
+    model_name="llama3.1:70b",
+    search_provider="duckduckgo",
+    num_results=5
+)
+
+print(result["final"])
 ```
 
-### Advanced Options
+## 🔧 Provider Configuration
 
-```bash
-# Specify number of results per search step (1-8)
-python multi_agent_research.py --query "latest AI safety research" --results 8
+### LLM Providers
 
-# Override Claude model
-python multi_agent_research.py --query "climate change solutions" --model claude-3-7-sonnet-20250219
-```
+| Provider | Cost | Setup | Configuration |
+|----------|------|-------|---------------|
+| **Anthropic Claude** | $0.50-2.00/query | Get API key | `LLM_PROVIDER=anthropic`<br>`ANTHROPIC_API_KEY=sk-ant-...` |
+| **OpenAI GPT** | $0.10-1.00/query | Get API key | `LLM_PROVIDER=openai`<br>`OPENAI_API_KEY=sk-...` |
+| **Ollama** | FREE | Install locally | `LLM_PROVIDER=ollama`<br>`OLLAMA_BASE_URL=http://localhost:11434/v1` |
+| **Self-Hosted** | Server costs | Deploy server | `LLM_PROVIDER=custom`<br>`OPENAI_BASE_URL=http://your-server:8000/v1` |
 
-### Command-Line Arguments
+### Search Providers
 
-| Argument | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `--query` | Yes | - | Research query to investigate |
-| `--results` | No | 5 | Number of search results per step (1-8) |
-| `--model` | No | `claude-sonnet-4-5-20250929` | Claude model override |
+| Provider | Cost | Setup | Configuration |
+|----------|------|-------|---------------|
+| **DuckDuckGo** | FREE | No setup needed | `SEARCH_PROVIDER=duckduckgo` |
+| **Brave Search** | 2K free/month | Get API key | `SEARCH_PROVIDER=brave`<br>`BRAVE_API_KEY=...` |
+| **Serper.dev** | 2.5K free/month | Get API key | `SEARCH_PROVIDER=serper`<br>`SERPER_API_KEY=...` |
 
-## 📊 Output Format
+## 📖 Detailed Setup Guides
 
-The script produces a structured output:
+### Ollama Setup (Recommended for Local)
 
-1. **Research Plan**: Numbered list of research steps
-2. **Top Results**: Title and URL for each search result
-3. **Final Brief**: Synthesized findings with inline citations (≤200 words)
-4. **References**: Numbered list of source URLs
-
-### Example Output
-
-```
-======================================================================
-🔍 RESEARCH QUERY: impact of quantum computing on cryptography
-======================================================================
-
-📋 RESEARCH PLAN:
-  1. Current state of quantum computing capabilities
-  2. Vulnerable cryptographic algorithms
-  3. Post-quantum cryptography solutions
-
-🔗 TOP RESULTS:
-  [1] Quantum Computing and Cryptography
-      https://example.com/quantum-crypto
-  ...
-
-📝 FINAL BRIEF:
-Quantum computing poses significant threats to current cryptographic
-systems [1][2]. RSA and ECC algorithms are particularly vulnerable to
-Shor's algorithm [3]...
-
-📚 REFERENCES:
-  [1] https://example.com/quantum-crypto
-  [2] https://example.com/post-quantum
-  ...
-```
-
-## 🔧 Model Selection & Self-Hosted Setup
-
-### Supported Providers
-
-| Provider | Cost | Setup Difficulty | Performance |
-|----------|------|------------------|-------------|
-| **Anthropic Claude** | $0.50-2.00/query | Easy | Excellent |
-| **Ollama** | FREE | Easy | Good |
-| **LM Studio** | FREE | Easy | Good |
-| **Self-Hosted vLLM** | Server costs | Medium | Excellent |
-| **Self-Hosted Text Generation WebUI** | Server costs | Medium | Good |
-
-### Quick Setup Guides
-
-#### Ollama (Recommended for Local)
 ```bash
 # Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
 
-# Pull a model
-ollama pull llama3.1:70b  # or mistral, phi3, etc.
-
-# Run Ollama server (runs automatically on install)
-ollama serve
+# Pull recommended model
+ollama pull llama3.1:70b
 
 # Configure .env
-echo "LLM_PROVIDER=ollama" > .env
-echo "OPENAI_BASE_URL=http://localhost:11434/v1" >> .env
-echo "MODEL_NAME=llama3.1:70b" >> .env
-echo "SERPAPI_API_KEY=your-key" >> .env
+cat > .env << EOF
+LLM_PROVIDER=ollama
+MODEL_NAME=llama3.1:70b
+OLLAMA_BASE_URL=http://localhost:11434/v1
+SEARCH_PROVIDER=duckduckgo
+EOF
+
+# Run
+python app.py
 ```
 
-#### LM Studio
+### Anthropic Claude Setup
+
 ```bash
-# 1. Download from https://lmstudio.ai
-# 2. Load a model (e.g., Mistral, Llama)
-# 3. Start local server (default: localhost:1234)
+# 1. Sign up at https://console.anthropic.com
+# 2. Add credits ($5-20 to start)
+# 3. Create API key
 # 4. Configure .env
-echo "LLM_PROVIDER=custom" > .env
-echo "OPENAI_BASE_URL=http://localhost:1234/v1" >> .env
-echo "MODEL_NAME=local-model" >> .env
-echo "SERPAPI_API_KEY=your-key" >> .env
+
+cat > .env << EOF
+LLM_PROVIDER=anthropic
+MODEL_NAME=claude-sonnet-4-5-20250929
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+SEARCH_PROVIDER=duckduckgo
+EOF
+
+# Run
+python app.py
 ```
 
-#### Self-Hosted Server (vLLM, TGI, etc.)
+### Self-Hosted LLM Setup
+
+For vLLM, Text Generation WebUI, or other OpenAI-compatible servers:
+
 ```env
 LLM_PROVIDER=custom
-OPENAI_BASE_URL=http://your-server:8000/v1
-OPENAI_API_KEY=your-optional-key
 MODEL_NAME=your-model-name
-SERPAPI_API_KEY=your-serpapi-key
+OPENAI_BASE_URL=http://your-server:8000/v1
+OPENAI_API_KEY=your-key-if-needed
+SEARCH_PROVIDER=duckduckgo
 ```
 
-### Model Recommendations
+## 💡 Usage Examples
 
-**For Best Results:**
-- Claude Sonnet 4 (paid, excellent)
-- Llama 3.1 70B (free via Ollama, very good)
-- Mistral Large (free via Ollama, good)
+### Web Interface
 
-**For Faster/Lower Resource:**
-- Llama 3.1 8B (free, decent)
-- Phi-3 Medium (free, decent)
-- Mistral 7B (free, decent)
+1. Start the server: `python app.py`
+2. Open http://localhost:7860
+3. Select providers from dropdowns
+4. Enter research query
+5. Click "Start Research"
+6. View formatted results
+
+### Python API
+
+```python
+from workflow import run_research
+
+# Basic usage
+result = run_research(
+    query="Impact of quantum computing on cryptography"
+)
+
+# Custom providers
+result = run_research(
+    query="Latest AI safety research",
+    llm_provider="ollama",
+    model_name="llama3.1:70b",
+    search_provider="brave",
+    num_results=8
+)
+
+# Access results
+print("Plan:", result["plan"])
+print("Brief:", result["final"])
+print("References:", result["references"])
+```
+
+### Extending the System
+
+**Add a new agent:**
+
+```python
+# agents/custom_agent.py
+def custom_agent_node(state):
+    # Your logic here
+    return {"custom_field": value, "messages": [...]}
+
+# workflow.py
+from agents.custom_agent import custom_agent_node
+workflow.add_node("custom", custom_agent_node)
+workflow.add_edge("reviewer", "custom")
+```
+
+**Add a new LLM provider:**
+
+```python
+# providers/llm.py
+elif provider == "new_provider":
+    return YourLLMClass(
+        model=model_name,
+        temperature=temperature,
+        api_key=os.getenv("YOUR_API_KEY"),
+    )
+```
 
 ## 🛡️ Error Handling
 
-- **API Failures**: Automatic retry with exponential backoff (max 3 attempts)
-- **Missing Keys**: Clear error messages with exit codes
-- **Empty Results**: Graceful handling with warnings
-- **Rate Limits**: Automatic delay between search requests
+The system handles errors gracefully:
 
-## 🧪 Development
+- **Missing API keys**: Clear error messages with setup instructions
+- **Provider failures**: Automatic retry with exponential backoff
+- **Empty results**: Continues with partial data when possible
+- **LLM errors**: Falls back to simpler operations
 
-### Project Structure
+## 📊 Cost Comparison
 
+**Free Options (Recommended for Testing):**
+- Ollama (local) + DuckDuckGo: $0/query
+- Total setup time: ~10 minutes
+
+**Low-Cost Cloud:**
+- OpenAI GPT-4o-mini + DuckDuckGo: ~$0.10/query
+- Anthropic Claude Haiku + DuckDuckGo: ~$0.15/query
+
+**High-Quality Cloud:**
+- Anthropic Claude Sonnet 4 + Brave: ~$1.50/query
+- OpenAI GPT-4o + Serper: ~$0.75/query
+
+## 🧪 Testing
+
+```bash
+# Test provider connections
+python -c "from providers.llm import get_llm; llm = get_llm('ollama', 'llama3.1:70b'); print('LLM OK')"
+python -c "from providers.search import search; results = search('test', 'duckduckgo', 3); print(f'Search OK: {len(results)} results')"
+
+# Test workflow
+python -c "from workflow import run_research; result = run_research('AI test query'); print('Workflow OK')"
 ```
-multi-agent-research/
-├── multi_agent_research.py  # Main script
-├── .env                      # Environment variables (not in git)
-├── .gitignore
-├── README.md
-└── requirements.txt          # Coming soon
-```
 
-### Contributing
+## 🐛 Troubleshooting
+
+### "ANTHROPIC_API_KEY required"
+- Add API key to `.env` file
+- Get key at https://console.anthropic.com
+
+### "duckduckgo-search required"
+- Install: `pip install duckduckgo-search`
+
+### "Ollama connection failed"
+- Ensure Ollama is running: `ollama serve`
+- Check URL in `.env` matches Ollama endpoint
+
+### "No search results found"
+- Try different search provider
+- Check internet connection
+- Verify API keys if using Brave/Serper
+
+### Gradio not loading
+- Check port 7860 is available
+- Try: `python app.py` with different port
+- Firewall may be blocking connection
+
+## 📝 Development
+
+**Code Style:**
+- PEP 8 formatting
+- Type hints on all functions
+- Docstrings with Args/Returns
+- Max file length: 250 lines
+
+**Architecture Principles:**
+- Single Responsibility: Each module has one job
+- Dependency Inversion: Depend on abstractions (providers)
+- Error Resilience: Never crash, always degrade gracefully
+- Testability: Pure functions, clear interfaces
+
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Follow code style guidelines
+4. Add tests for new functionality
+5. Commit: `git commit -m 'Add amazing feature'`
+6. Push: `git push origin feature/amazing-feature`
+7. Open Pull Request
 
-## 📝 License
+## 📄 License
 
-This project is open source and available under the MIT License.
+MIT License - see LICENSE file for details.
 
 ## 🙏 Acknowledgments
 
 - Built with [LangGraph](https://github.com/langchain-ai/langgraph) and [LangChain](https://github.com/langchain-ai/langchain)
-- Powered by [Anthropic Claude](https://www.anthropic.com/claude)
-- Search provided by [SerpAPI](https://serpapi.com/)
+- Powered by [Anthropic Claude](https://www.anthropic.com/claude), [OpenAI](https://openai.com), and [Ollama](https://ollama.com)
+- Search by [DuckDuckGo](https://duckduckgo.com), [Brave](https://brave.com/search/api/), and [Serper](https://serper.dev)
+- UI by [Gradio](https://gradio.app)
 
 ## 📞 Support
 
-For issues, questions, or contributions, please open an issue on GitHub.
+- Issues: https://github.com/kaiser-data/multi-agent-research/issues
+- Discussions: https://github.com/kaiser-data/multi-agent-research/discussions
 
 ---
 
-**Note**: This tool is for research purposes. Ensure compliance with API terms of service and rate limits.
+**Ready to start researching?** Run `python app.py` and open http://localhost:7860 🚀
