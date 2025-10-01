@@ -49,13 +49,7 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install 'langchain>=0.3.27,<0.4' \
-            'langgraph>=0.6.8,<0.7' \
-            'langchain-anthropic>=0.3.21,<0.4' \
-            'langchain-openai>=0.3.0' \
-            python-dotenv \
-            google-search-results \
-            requests
+pip install -r requirements.txt
 ```
 
 ### Configuration

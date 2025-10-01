@@ -1,0 +1,16 @@
+# Core LangChain dependencies
+langchain>=0.3.27,<0.4
+langgraph>=0.6.8,<0.7
+
+# LLM providers
+langchain-anthropic>=0.3.21,<0.4
+langchain-openai>=0.3.0,<0.4
+
+# Environment and utilities
+python-dotenv>=1.0.0
+
+# Search integration
+google-search-results>=2.4.2
+
+# HTTP requests
+requests>=2.31.0
